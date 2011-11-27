@@ -27,11 +27,14 @@ class UrlFetcher(object):
         
     def do_fetch(self, url):
         req = urllib2.Request(url=url, headers=self.headers)
+        s = None
         try:
             rsp = urllib2.urlopen(req)
-            return rsp.read()
+            s = rsp.read()
+            rsp.close()
         except:
-            return None
+            s = None
+        return s
         
         
         
