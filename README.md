@@ -1,3 +1,3 @@
 ##Google Maps Offline Viewer##
 
-Written by Python and PyQt4
+* Written by Python and PyQt4
