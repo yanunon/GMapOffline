@@ -10,9 +10,8 @@ import sys
 import os
 from PyQt4 import QtCore,QtGui
 
-from gmaps.mapDownloader import MapDownloader
+import gmaps.mapDownloader as mapDownloader
 from gmaps.mapTool import coord_to_tile
-from gmaps.mapFile import get_tile_path
 
 class Example(QtGui.QWidget):
     def __init__(self):
@@ -20,8 +19,8 @@ class Example(QtGui.QWidget):
         self.initUI()
         self.center = [39.94,116.38]
         self.zoom = 9
-        self.layer = 'gsat'
-        self.downloader = MapDownloader(10)
+        self.layer = 'mixed_cn'
+        self.downloader = mapDownloader.MapDownloader(10)
         self.window_size = [511, 511]
         self.half_window_size = (self.window_size[0]/2, self.window_size[1]/2)
         self.xmin = -100
@@ -67,8 +66,8 @@ class Example(QtGui.QWidget):
             self.ymax = ymax
             self.downloader.dl_region(self.xmin - 1, self.xmax + 1, self.ymin - 1 , self.ymax + 1, self.zoom, self.layer)
             #self.downloader.wait_thread_done()
-            
-            print 'download over!'
+            #self.downloader.wait()
+            #print 'download over!'
             self.refresh_map()
         #self.map_qpiximage.save("test.jpg")
         #print self.map_top_left_point
@@ -114,7 +113,7 @@ class Example(QtGui.QWidget):
                 self.refresh_map()
     
     def closeEvent(self, event):
-        self.downloader.stop_all()
+        self.downloader.wait_and_stop()
     
     def refresh_map(self):
         x_count = self.xmax - self.xmin + 1
@@ -125,7 +124,8 @@ class Example(QtGui.QWidget):
         #temp_pix = QtGui.QPixmap(256,256)
         for x in range(x_count + 1):
             for y in range(y_count + 1):
-                file_path = get_tile_path(self.layer, self.xmin + x, self.ymin + y, self.zoom)[1]
+                tile = mapDownloader.MapTile(self.layer, self.xmin + x, self.ymin + y, self.zoom)
+                file_path = tile.get_file_path()
                 temp_pix = QtGui.QPixmap(file_path)
                 if temp_pix.isNull():
                     self.need_fresh = True

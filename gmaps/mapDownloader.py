@@ -61,16 +61,7 @@ class MapTile:
         file_path = os.path.join(file_path, file_name)
         return file_path
     
-def get_location_tiles(top_left, bottom_right, zoom, layer):
-    top_left_tile = mapTool.coord_to_tile((top_left[0], top_left[1], zoom))
-    bottom_right_tile = mapTool.coord_to_tile((bottom_right[0], bottom_right[1], zoom))
-    
-    xmin = top_left_tile[0][0]
-    ymin = top_left_tile[0][1]
-    
-    xmax = bottom_right_tile[0][0]
-    ymax = bottom_right_tile[0][1]
-    
+def get_region_tiles(xmin, xmax, ymin, ymax, zoom, layer):
     world_tiles = 1 << zoom
     if xmax - xmin >= world_tiles:
         xmin, xmax = 0, world_tiles-1
@@ -86,6 +77,19 @@ def get_location_tiles(top_left, bottom_right, zoom, layer):
             tiles.append(tile)
     
     return tiles
+
+def get_location_tiles(top_left, bottom_right, zoom, layer):
+    top_left_tile = mapTool.coord_to_tile((top_left[0], top_left[1], zoom))
+    bottom_right_tile = mapTool.coord_to_tile((bottom_right[0], bottom_right[1], zoom))
+    
+    xmin = top_left_tile[0][0]
+    ymin = top_left_tile[0][1]
+    
+    xmax = bottom_right_tile[0][0]
+    ymax = bottom_right_tile[0][1]
+    
+    return get_region_tiles(xmin, xmax, ymin, ymax, zoom, layer)
+
     
 def merge_location_image(top_left, bottom_right, zoom, layer):
     top_left_tile = mapTool.coord_to_tile((top_left[0], top_left[1], zoom))
@@ -102,7 +106,7 @@ def merge_location_image(top_left, bottom_right, zoom, layer):
         xmin, xmax = 0, world_tiles-1
     if ymax - ymin >= world_tiles:
         ymin, ymax = 0, world_tiles-1
-    
+
     width = (xmax - xmin+world_tiles)%world_tiles + 1
     height = (ymax - ymin+world_tiles)%world_tiles + 1
     map_image = Image.new("RGB", (width*256,height*256))
@@ -194,7 +198,15 @@ class MapDownloader:
         for tile in tiles:
             self.task_queue.put(tile)
     
-    def wait_thread_done(self):
+    def dl_region(self, xmin, xmax, ymin, ymax, zoom, layer):
+        tiles = get_region_tiles(xmin, xmax, ymin, ymax, zoom, layer)
+        for tile in tiles:
+            self.task_queue.put(tile)
+    
+    def wait(self):
+        self.task_queue.join()
+    
+    def wait_and_stop(self):
         self.task_queue.join()
         for thread in self.threads:
             thread.stop()
@@ -208,7 +220,7 @@ if __name__ == '__main__':
     zoom = 18
     #time.sleep(10)
     d.dl_location(top_left, bottom_right, zoom, layer)
-    d.wait_thread_done()
+    d.wait_and_stop()
     
     #for thread in d.threads:
     #    thread.join()
