@@ -7,11 +7,10 @@ Created on 2011-11-12
 '''
 
 import random
-import re
 import os
-import time
 import Image
 import Queue
+import StringIO
 from threading import Thread, Lock
 
 import mapTool
@@ -21,33 +20,40 @@ MAP_LAYERS = {
           'map_cn': 'http://mt%d.google.cn/vt/lyrs=m@216173479&hl=zh-CN&gl=CN&src=app&x=%d&y=%d&z=%d&s=G',
           'sat_cn': 'http://mt%d.google.cn/vt/lyrs=s@129&hl=zh-CN&gl=CN&src=app&x=%d&s=&y=%d&z=%d&s=Galileo',
           'road_cn': 'http://mt%d.google.cn/vt/imgtp=png32&lyrs=h@216009069&hl=zh-CN&gl=CN&src=app&x=%d&s=&y=%d&z=%d&s=Galile',
+          'mixed_cn': '',
           }
 
 MAP_LAYER_IMG_TYPE = {
             'map_cn': 'png',
             'sat_cn': 'jpg',
             'road_cn': 'png',
+            'mixed_cn': 'jpg',
                        }
+
+MAP_DIR = 'maps'
 
 class MapTile:
     
-    def __init__(self, layer, x, y, z, overwrite=False):
+    def __init__(self, layer, x, y, z):
         self.layer = layer
         self.x = x
         self.y = y
         self.z = z
-        self.overwrite = overwrite
     
     def get_url(self):
-        url = None
+        url = []
         if self.layer in MAP_LAYERS.keys():
-            url = MAP_LAYERS[self.layer] % (random.randrange(4), self.x, self.y, self.z)
+            if self.layer == 'mixed_cn':
+                url.append(MAP_LAYERS['sat_cn'] % (random.randrange(4), self.x, self.y, self.z))
+                url.append(MAP_LAYERS['road_cn'] % (random.randrange(4), self.x, self.y, self.z))
+            else:
+                url.append(MAP_LAYERS[self.layer] % (random.randrange(4), self.x, self.y, self.z))
         return url
     
     def get_file_path(self):
         world_tile = 1 << self.z
         x = self.x % world_tile
-        folder_list = [self.layer, str(self.z), str(x/1024), str(x%1024), str(self.y/1024)]
+        folder_list = [MAP_DIR, self.layer, str(self.z), str(x/1024), str(x%1024), str(self.y/1024)]
         file_name = "%d.%s" % (self.y%1024 , MAP_LAYER_IMG_TYPE[self.layer])
         file_path = ''
         for folder in folder_list:
@@ -134,16 +140,34 @@ class DownloadThread(Thread):
                 task = self.task_queue.get(True, 1)
                 file_path = task.get_file_path()
                 if not os.path.exists(file_path):
-                    fetch_url = task.get_url()
-                    file_data = self.fetcher.do_fetch(fetch_url)
                     folder_path = os.path.dirname(file_path)
                     self.folder_lock.acquire()
                     if not os.path.exists(folder_path):
                         os.makedirs(folder_path)
                     self.folder_lock.release()
-                    file = open(file_path, 'wb')
-                    file.write(file_data)
-                    file.close()
+                    
+                    fetch_url = task.get_url()
+                    file_data = self.fetcher.do_fetch(fetch_url[0])
+                    if task.layer == 'mixed_cn':
+                        file_data_2 = self.fetcher.do_fetch(fetch_url[1])
+                        buf = StringIO.StringIO()
+                        buf.write(file_data)
+                        buf.seek(0)
+                        img = Image.open(buf)
+                        
+                        buf2 = StringIO.StringIO()
+                        buf2.write(file_data_2)
+                        buf2.seek(0)
+                        img2 = Image.open(buf2)
+                        img.paste(img2, (0, 0, 256, 256), img2)
+                        
+                        buf.close()
+                        buf2.close()
+                        img.save(file_path)
+                    else:
+                        file = open(file_path, 'wb')
+                        file.write(file_data)
+                        file.close()
                 self.task_queue.task_done()
             except Queue.Empty:
                 pass
@@ -174,18 +198,13 @@ class MapDownloader:
         self.task_queue.join()
         for thread in self.threads:
             thread.stop()
-    
-    def stop_all(self):
-        self.task_queue.stop()
-        for thread in self.threads:
-            thread.join()
             
 if __name__ == '__main__':
     #d = downloadMap('gmap')
     d = MapDownloader(10)
     top_left = (39.922787,116.391925)
     bottom_right = (39.914016,116.401452)
-    layer = 'sat_cn'
+    layer = 'mixed_cn'
     zoom = 18
     #time.sleep(10)
     d.dl_location(top_left, bottom_right, zoom, layer)
